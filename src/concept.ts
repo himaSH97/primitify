@@ -21,7 +21,6 @@ const sourceStamp = getElement<HTMLElement>('#source-stamp')
 const emptyChoosePhotoButton = getElement<HTMLButtonElement>('#empty-choose-photo')
 const sourceDimensions = getElement<HTMLElement>('#source-dimensions')
 const sourceName = getElement<HTMLElement>('#source-name')
-const workingDimensions = getElement<HTMLElement>('#working-dimensions')
 const generatedPreview = getElement<HTMLCanvasElement>('#generated-preview')
 const generatedVectorPreview = getElement<HTMLImageElement>('#generated-vector-preview')
 const generatedEmpty = getElement<HTMLElement>('#generated-empty')
@@ -250,7 +249,6 @@ async function displayImage(file: File): Promise<void> {
     dismissIntro()
     sourceDimensions.textContent = `SOURCE · ${loaded.sourceWidth} × ${loaded.sourceHeight} PX`
     sourceName.textContent = file.name
-    workingDimensions.textContent = `${loaded.imageData.width} × ${loaded.imageData.height} WORKING`
     generatedFrame.setAttribute('aria-label', `Geometric render of ${file.name}`)
     choosePhotoButton.firstChild!.textContent = 'Replace photo '
 
@@ -476,7 +474,6 @@ fileInput.addEventListener('change', () => {
 })
 workSize.addEventListener('change', () => {
   if (selectedFile) void displayImage(selectedFile)
-  else workingDimensions.textContent = `WORKING SIZE · ${workSize.value} PX MAX`
 })
 shapeCount.addEventListener('change', () => {
   if (runState === 'done') resetRun()
