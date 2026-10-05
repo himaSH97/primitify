@@ -91,8 +91,10 @@ export class Model {
 
     const aspect = this.width / this.height
     const width = aspect >= 1 ? outputSize : Math.trunc(outputSize * aspect)
-    const height = aspect >= 1 ? Math.trunc(outputSize / aspect) : outputSize
+    const artworkHeight = aspect >= 1 ? Math.trunc(outputSize / aspect) : outputSize
+    const height = artworkHeight
     const scale = aspect >= 1 ? outputSize / this.width : outputSize / this.height
+    const signatureFontSize = Math.max(1, Math.round(outputSize / 85))
     const background = `#${hexByte(this.background.r)}${hexByte(this.background.g)}${hexByte(this.background.b)}`
 
     return {
@@ -104,7 +106,11 @@ export class Model {
         `<rect x="0" y="0" width="${width}" height="${height}" fill="${background}" />`,
         `<g transform="scale(${scale.toFixed(6)}) translate(0.5 0.5)">`,
       ].join('\n'),
-      footer: '</g>\n</svg>',
+      footer: [
+        '</g>',
+        `<text x="${width - 12}" y="${artworkHeight - 12}" fill="#fff" font-family="sans-serif" font-size="${signatureFontSize}" font-weight="700" text-anchor="end">Made with Primitify <tspan fill="#d86249">♥</tspan></text>`,
+        '</svg>',
+      ].join('\n'),
     }
   }
 
