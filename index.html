@@ -100,6 +100,8 @@
       .preview-index { color: var(--coral); font-size: 10px; }
       .preview-kicker { font-size: 9px; }
       .image-frame { position: relative; width: 100%; aspect-ratio: 4 / 5; overflow: hidden; background: #ccd4c3; }
+      .source-frame.is-dragging { outline: 3px solid var(--coral); outline-offset: -5px; }
+      .source-frame.is-dragging::after { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; background: rgba(241, 243, 236, .82); color: var(--ink); content: 'DROP PHOTO TO BEGIN'; font-size: 11px; font-weight: 700; pointer-events: none; }
       #generated-frame { background: #eef0eb; }
       .image-frame img { width: 100%; height: 100%; display: block; object-fit: cover; }
       .image-frame img[hidden], .image-frame canvas[hidden] { display: none; }
@@ -260,7 +262,7 @@
               <div class="preview-title"><span class="preview-index">A</span><span>Original image</span></div>
               <span class="preview-kicker" id="source-dimensions">SOURCE IMAGE · EMPTY</span>
             </div>
-            <div class="image-frame">
+            <div class="image-frame source-frame" id="source-frame">
               <img class="original-image" alt="Uploaded original image" hidden />
               <div class="preview-empty source-empty" id="source-empty">
                 <h2>Add your photo</h2>

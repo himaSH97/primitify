@@ -15,6 +15,7 @@ const shapeCount = getElement<HTMLSelectElement>('#shape-count')
 const outputSize = getElement<HTMLSelectElement>('#output-size')
 const intro = getElement<HTMLElement>('#intro')
 const comparison = getElement<HTMLElement>('#comparison')
+const sourceFrame = getElement<HTMLElement>('#source-frame')
 const sourceImage = getElement<HTMLImageElement>('.original-image')
 const sourceEmpty = getElement<HTMLElement>('#source-empty')
 const sourceStamp = getElement<HTMLElement>('#source-stamp')
@@ -467,6 +468,21 @@ function choosePhoto(): void {
 
 choosePhotoButton.addEventListener('click', choosePhoto)
 emptyChoosePhotoButton.addEventListener('click', choosePhoto)
+sourceFrame.addEventListener('dragover', (event) => {
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+  sourceFrame.classList.add('is-dragging')
+})
+sourceFrame.addEventListener('dragleave', (event) => {
+  if (sourceFrame.contains(event.relatedTarget as Node | null)) return
+  sourceFrame.classList.remove('is-dragging')
+})
+sourceFrame.addEventListener('drop', (event) => {
+  event.preventDefault()
+  sourceFrame.classList.remove('is-dragging')
+  const [file] = event.dataTransfer?.files ?? []
+  if (file) void displayImage(file)
+})
 fileInput.addEventListener('change', () => {
   const [file] = fileInput.files ?? []
   fileInput.value = ''
