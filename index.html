@@ -52,10 +52,7 @@
       .shell { width: min(1440px, 100%); margin: 0 auto; padding: 0 5.2%; }
       .topbar { height: 76px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
       .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); font-size: 18px; font-weight: 700; text-decoration: none; }
-      .brand-mark { width: 22px; height: 22px; position: relative; display: block; overflow: hidden; border: 1px solid var(--ink); border-radius: 50%; }
-      .brand-mark::before, .brand-mark::after { position: absolute; width: 15px; height: 15px; content: ''; transform: rotate(45deg); }
-      .brand-mark::before { top: -4px; left: -4px; background: var(--coral); }
-      .brand-mark::after { right: -4px; bottom: -4px; background: var(--moss); }
+      .brand-mark { width: 26px; height: 26px; display: block; flex: none; }
       .brand-period { color: var(--coral); }
       .top-meta { display: flex; gap: 28px; align-items: center; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0; }
       .online { display: inline-flex; align-items: center; gap: 8px; }
@@ -215,7 +212,7 @@
     <div class="shell">
       <header class="topbar">
         <a class="brand" href="/" aria-label="Primitify home">
-          <span class="brand-mark" aria-hidden="true"></span>
+          <img class="brand-mark" src="/favicon.svg" alt="" />
           <span>primitify<span class="brand-period">.</span></span>
         </a>
         <div class="top-meta"><span class="workspace-label">IMAGE STUDY · 014</span><span class="online" id="worker-status">CONNECTING WORKER</span></div>
@@ -253,8 +250,8 @@
                 <div class="export-controls">
                   <label class="visually-hidden" for="export-format">Export format</label>
                   <select class="export-format" id="export-format" aria-label="Export format">
-                    <option value="svg" selected>SVG</option>
-                    <option value="png">PNG</option>
+                    <option value="svg">SVG</option>
+                    <option value="png" selected>PNG</option>
                   </select>
                   <button class="button button-primary" id="export-file" type="button" disabled><span aria-hidden="true">↓</span>Download</button>
                 </div>
