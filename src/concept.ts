@@ -13,7 +13,6 @@ const choosePhotoButton = getElement<HTMLButtonElement>('#choose-photo')
 const workSize = getElement<HTMLSelectElement>('#work-size')
 const shapeCount = getElement<HTMLSelectElement>('#shape-count')
 const outputSize = getElement<HTMLSelectElement>('#output-size')
-const projectName = getElement<HTMLElement>('#project-name')
 const intro = getElement<HTMLElement>('#intro')
 const comparison = getElement<HTMLElement>('#comparison')
 const sourceImage = getElement<HTMLImageElement>('.original-image')
@@ -190,12 +189,12 @@ function restartWorker(): void {
   worker?.terminate()
   worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
   workerReady = false
-  workerStatus.textContent = 'CONNECTING WORKER'
+  workerStatus.textContent = 'PREPARING YOUR CANVAS'
   worker.addEventListener('message', handleWorkerMessage)
   worker.addEventListener('error', () => {
     workerReady = false
     runState = 'idle'
-    workerStatus.textContent = 'WORKER UNAVAILABLE'
+    workerStatus.textContent = "CAN'T CREATE RIGHT NOW"
     setStatus('The image worker stopped. Reload the page to try again.', true)
     updateControls()
   })
@@ -251,7 +250,6 @@ async function displayImage(file: File): Promise<void> {
     dismissIntro()
     sourceDimensions.textContent = `SOURCE · ${loaded.sourceWidth} × ${loaded.sourceHeight} PX`
     sourceName.textContent = file.name
-    projectName.textContent = file.name
     workingDimensions.textContent = `${loaded.imageData.width} × ${loaded.imageData.height} WORKING`
     generatedFrame.setAttribute('aria-label', `Geometric render of ${file.name}`)
     choosePhotoButton.firstChild!.textContent = 'Replace photo '
@@ -394,7 +392,7 @@ function handleWorkerMessage({ data }: MessageEvent<WorkerEvent>): void {
   switch (data.type) {
     case 'ready':
       workerReady = true
-      workerStatus.textContent = 'WORKER READY'
+      workerStatus.textContent = 'READY TO CREATE'
       updateControls()
       break
     case 'runStarted':

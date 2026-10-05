@@ -94,7 +94,10 @@ export class Model {
     const artworkHeight = aspect >= 1 ? Math.trunc(outputSize / aspect) : outputSize
     const height = artworkHeight
     const scale = aspect >= 1 ? outputSize / this.width : outputSize / this.height
-    const signatureFontSize = Math.max(1, Math.round(outputSize / 85))
+    const logoScale = width / 1024 * 0.5304
+    const logoMargin = width / 1024 * 16
+    const logoX = width - 312 * logoScale - logoMargin
+    const logoY = height - 64 * logoScale - logoMargin
     const background = `#${hexByte(this.background.r)}${hexByte(this.background.g)}${hexByte(this.background.b)}`
 
     return {
@@ -108,7 +111,44 @@ export class Model {
       ].join('\n'),
       footer: [
         '</g>',
-        `<text x="${width - 12}" y="${artworkHeight - 12}" fill="#fff" font-family="sans-serif" font-size="${signatureFontSize}" font-weight="700" text-anchor="end">Made with Primitify <tspan fill="#d86249">♥</tspan></text>`,
+        '<defs>',
+        '<clipPath id="footer-p-shape">',
+        '<path clip-rule="evenodd" d="M13 10h21c12 0 19 7 19 17s-7 17-19 17H26v10H13V10zm13 12v10h8c4 0 6-2 6-5s-2-5-6-5h-8z" />',
+        '</clipPath>',
+        '</defs>',
+        `<g transform="translate(${logoX.toFixed(3)} ${logoY.toFixed(3)}) scale(${logoScale.toFixed(6)})">`,
+        '<text x="12" y="53" fill="#4b5a45" font-family="DM Sans, sans-serif" font-size="18" font-weight="600">Made with</text>',
+        '<g transform="translate(104 0)">',
+        '<path fill="#4b5a45" fill-rule="evenodd" d="M13 10h21c12 0 19 7 19 17s-7 17-19 17H26v10H13V10zm13 12v10h8c4 0 6-2 6-5s-2-5-6-5h-8z" />',
+        '<g clip-path="url(#footer-p-shape)">',
+        '<path d="M8 8 30 10 17 26z" fill="#718066" />',
+        '<path d="M30 10 44 8 37 18z" fill="#65745a" />',
+        '<path d="M30 10 37 18 17 26z" fill="#87927b" />',
+        '<path d="M44 8 59 15 37 18z" fill="#6d7c62" />',
+        '<path d="M59 15 53 27 37 18z" fill="#65745a" />',
+        '<path d="M37 18 53 27 39 25z" fill="#5c6e54" />',
+        '<path d="M8 8 17 26 8 37z" fill="#65745a" />',
+        '<path d="M17 26 27 36 8 37z" fill="#718066" />',
+        '<path d="M17 26 37 18 27 36z" fill="#6d7c62" />',
+        '<path d="M37 18 39 25 27 36z" fill="#87927b" />',
+        '<path d="M27 36 39 25 46 32z" fill="#718066" />',
+        '<path d="M27 36 46 32 37 41z" fill="#5c6e54" />',
+        '<path d="M46 32 57 37 37 41z" fill="#65745a" />',
+        '<path d="M57 37 59 58 48 48z" fill="#718066" />',
+        '<path d="M57 37 48 48 37 41z" fill="#6d7c62" />',
+        '<path d="M8 37 27 36 15 48z" fill="#87927b" />',
+        '<path d="M27 36 26 45 15 48z" fill="#65745a" />',
+        '<path d="M8 37 15 48 8 59z" fill="#5c6e54" />',
+        '<path d="M15 48 26 45 20 59z" fill="#718066" />',
+        '<path d="M8 59 15 48 20 59z" fill="#65745a" />',
+        '<path d="M20 59 26 45 30 59z" fill="#87927b" />',
+        '<path d="M26 45 37 41 30 59z" fill="#6d7c62" />',
+        '<path d="M37 41 48 48 30 59z" fill="#87927b" />',
+        '<path d="M48 48 59 58 30 59z" fill="#65745a" />',
+        '</g>',
+        '<text x="53" y="54" fill="#22322b" font-family="DM Sans, sans-serif" font-size="32" font-weight="700">rimitify</text>',
+        '</g>',
+        '</g>',
         '</svg>',
       ].join('\n'),
     }
