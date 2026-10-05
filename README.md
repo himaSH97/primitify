@@ -1,4 +1,4 @@
-# Primitive Web (Browser)
+# Primitify (Browser)
 
 Browser-only web app that recreates photos using stacked semi-transparent geometric shapes, matching the algorithm described in [fogleman/primitive](https://github.com/fogleman/primitive).
 

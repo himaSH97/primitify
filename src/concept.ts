@@ -14,23 +14,32 @@ const workSize = getElement<HTMLSelectElement>('#work-size')
 const shapeCount = getElement<HTMLSelectElement>('#shape-count')
 const outputSize = getElement<HTMLSelectElement>('#output-size')
 const projectName = getElement<HTMLElement>('#project-name')
+const intro = getElement<HTMLElement>('#intro')
+const comparison = getElement<HTMLElement>('#comparison')
 const sourceImage = getElement<HTMLImageElement>('.original-image')
+const sourceEmpty = getElement<HTMLElement>('#source-empty')
+const sourceStamp = getElement<HTMLElement>('#source-stamp')
+const emptyChoosePhotoButton = getElement<HTMLButtonElement>('#empty-choose-photo')
 const sourceDimensions = getElement<HTMLElement>('#source-dimensions')
 const sourceName = getElement<HTMLElement>('#source-name')
 const workingDimensions = getElement<HTMLElement>('#working-dimensions')
-const generatedPlaceholder = getElement<SVGElement>('#generated-placeholder')
 const generatedPreview = getElement<HTMLCanvasElement>('#generated-preview')
+const generatedVectorPreview = getElement<HTMLImageElement>('#generated-vector-preview')
+const generatedEmpty = getElement<HTMLElement>('#generated-empty')
+const generatedEmptyTitle = getElement<HTMLElement>('#generated-empty-title')
+const generatedEmptyCopy = getElement<HTMLElement>('#generated-empty-copy')
+const generatedStartButton = getElement<HTMLButtonElement>('#generated-start')
 const generatedFrame = getElement<HTMLElement>('#generated-frame')
 const frameStamp = getElement<HTMLElement>('#frame-stamp')
+const renderProgressBadge = getElement<HTMLElement>('#render-progress')
+const renderProgressRing = getElement<SVGCircleElement>('#render-progress-ring')
+const renderProgressLabel = getElement<HTMLElement>('#render-progress-label')
 const shapeProgress = getElement<HTMLElement>('#shape-progress')
 const generationState = getElement<HTMLElement>('#generation-state')
 const scoreValue = getElement<HTMLElement>('#score-value')
-const generationProgress = getElement<HTMLElement>('#generation-progress')
-const progressFill = getElement<HTMLElement>('#progress-fill')
 const runInfo = getElement<HTMLElement>('#run-info')
 const runStatus = getElement<HTMLElement>('#run-status')
 const startButton = getElement<HTMLButtonElement>('#start-run')
-const pauseButton = getElement<HTMLButtonElement>('#pause-run')
 const resetButton = getElement<HTMLButtonElement>('#reset-run')
 const exportButton = getElement<HTMLButtonElement>('#export-svg')
 
@@ -49,23 +58,52 @@ let svgHeader = ''
 let svgFooter = ''
 let svgFragments: string[] = []
 let currentSvg = ''
+let previewObjectUrl: string | null = null
 
 function setStatus(message: string, isError = false): void {
   runStatus.textContent = message
   runInfo.classList.toggle('is-error', isError)
 }
 
+function dismissIntro(): void {
+  if (intro.hidden || intro.classList.contains('is-leaving')) return
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    intro.hidden = true
+    return
+  }
+
+  intro.classList.add('is-leaving')
+  const finishDismissal = (event: AnimationEvent) => {
+    if (event.target !== intro || event.animationName !== 'dismiss-intro') return
+    intro.hidden = true
+    intro.classList.remove('is-leaving')
+    intro.removeEventListener('animationend', finishDismissal)
+  }
+  intro.addEventListener('animationend', finishDismissal)
+}
+
+function animateEntrance(element: HTMLElement): void {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  element.classList.remove('is-entering')
+  void element.offsetWidth
+  element.classList.add('is-entering')
+  element.addEventListener('animationend', () => element.classList.remove('is-entering'), { once: true })
+}
+
 function updateControls(): void {
   const busy = runState === 'running' || runState === 'pausing' || runState === 'paused'
-  startButton.disabled = !workerReady || !selectedTarget || loading || busy
+  startButton.disabled = !workerReady || !selectedTarget || loading || runState === 'pausing'
   workSize.disabled = busy || loading
   shapeCount.disabled = busy || loading
   outputSize.disabled = busy || loading
   choosePhotoButton.disabled = loading
-  pauseButton.disabled = runState !== 'running' && runState !== 'paused'
-  pauseButton.innerHTML = runState === 'paused'
+  startButton.innerHTML = runState === 'paused'
     ? '<span aria-hidden="true">▶</span>Resume'
-    : '<span class="button-icon" aria-hidden="true">Ⅱ</span>Pause'
+    : runState === 'running' || runState === 'pausing'
+      ? '<span class="button-icon" aria-hidden="true">Ⅱ</span>Pause'
+      : '<span aria-hidden="true">▶</span>Start'
+  startButton.setAttribute('aria-label', runState === 'paused' ? 'Resume generation' : runState === 'running' ? 'Pause generation' : 'Start generation')
+  generatedStartButton.disabled = !workerReady || !selectedTarget || loading || runState !== 'idle'
   resetButton.disabled = !selectedTarget || loading
   exportButton.disabled = currentSvg.length === 0
 }
@@ -75,13 +113,34 @@ function clearSvg(): void {
   svgFooter = ''
   svgFragments = []
   currentSvg = ''
+  setRenderProgress(null)
+  if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl)
+  previewObjectUrl = null
+  generatedVectorPreview.hidden = true
+  updateControls()
+}
+
+function renderVectorPreview(): void {
+  if (!svgHeader || svgFragments.length === 0) return
+
+  currentSvg = [svgHeader, ...svgFragments, svgFooter].join('\n')
+  const previousUrl = previewObjectUrl
+  const firstVectorFrame = generatedVectorPreview.hidden
+  previewObjectUrl = URL.createObjectURL(new Blob([currentSvg], { type: 'image/svg+xml' }))
+  generatedVectorPreview.onload = () => {
+    if (previousUrl && previousUrl !== previewObjectUrl) URL.revokeObjectURL(previousUrl)
+  }
+  generatedVectorPreview.src = previewObjectUrl
+  generatedVectorPreview.hidden = false
+  if (firstVectorFrame) animateEntrance(generatedVectorPreview)
+  generatedPreview.hidden = true
+  generatedEmpty.hidden = true
   updateControls()
 }
 
 function assembleSvg(): void {
   if (!svgHeader || svgFragments.length === 0) return
-  currentSvg = [svgHeader, ...svgFragments, svgFooter].join('\n')
-  updateControls()
+  renderVectorPreview()
 }
 
 function drawBackground(): void {
@@ -100,8 +159,28 @@ function drawBackground(): void {
     pixels[offset + 3] = 255
   }
   context.putImageData(new ImageData(pixels, width, height), 0, 0)
-  generatedPlaceholder.style.display = 'none'
+  generatedEmpty.hidden = true
+  generatedVectorPreview.hidden = true
   generatedPreview.hidden = false
+}
+
+function setRenderProgress(value: number | null): void {
+  if (value === null) {
+    renderProgressBadge.hidden = true
+    generatedFrame.classList.remove('has-render-progress')
+    renderProgressBadge.setAttribute('aria-valuenow', '0')
+    renderProgressRing.style.strokeDashoffset = String(2 * Math.PI * 18)
+    renderProgressLabel.textContent = '0%'
+    return
+  }
+
+  const percentage = Math.max(0, Math.min(100, Math.round(value)))
+  const circumference = 2 * Math.PI * 18
+  renderProgressBadge.hidden = false
+  generatedFrame.classList.add('has-render-progress')
+  renderProgressBadge.setAttribute('aria-valuenow', String(percentage))
+  renderProgressRing.style.strokeDashoffset = String(circumference * (1 - percentage / 100))
+  renderProgressLabel.textContent = `${percentage}%`
 }
 
 function restartWorker(): void {
@@ -121,13 +200,21 @@ function restartWorker(): void {
 }
 
 function resetProgress(): void {
+  setRenderProgress(null)
   const total = Number(shapeCount.value)
   shapeProgress.textContent = `TRIANGLES · 0 / ${total}`
   generationState.textContent = selectedTarget ? 'Ready to generate' : 'Waiting for an image'
   scoreValue.textContent = 'SCORE · —'
   frameStamp.textContent = '0 SHAPES'
-  progressFill.style.width = '0%'
-  generationProgress.setAttribute('aria-valuenow', '0')
+}
+
+function showReadyToRender(): void {
+  generatedPreview.hidden = true
+  generatedVectorPreview.hidden = true
+  generatedEmpty.hidden = false
+  generatedStartButton.hidden = false
+  generatedEmptyTitle.textContent = 'Ready to render'
+  generatedEmptyCopy.textContent = 'Start generation to build a faceted version of your photo.'
 }
 
 async function displayImage(file: File): Promise<void> {
@@ -153,6 +240,12 @@ async function displayImage(file: File): Promise<void> {
     selectedFile = file
     sourceImage.src = sourceUrl
     sourceImage.alt = file.name
+    sourceImage.hidden = false
+    animateEntrance(sourceImage)
+    sourceEmpty.hidden = true
+    sourceStamp.hidden = false
+    comparison.classList.remove('is-empty')
+    dismissIntro()
     sourceDimensions.textContent = `SOURCE · ${loaded.sourceWidth} × ${loaded.sourceHeight} PX`
     sourceName.textContent = file.name
     projectName.textContent = file.name
@@ -167,7 +260,7 @@ async function displayImage(file: File): Promise<void> {
       height: loaded.imageData.height,
       data: loaded.imageData.data.slice(),
     }
-    drawBackground()
+    showReadyToRender()
     resetProgress()
     runState = 'idle'
     setStatus('Image ready · start generation')
@@ -191,6 +284,7 @@ function startRun(): void {
   generationState.textContent = 'Searching for first shape…'
   setStatus('Building image · search running in worker')
   drawBackground()
+  setRenderProgress(0)
   updateControls()
 
   const request: WorkerRequest = {
@@ -209,13 +303,26 @@ function startRun(): void {
   worker.postMessage(request)
 }
 
+function handlePrimaryAction(): void {
+  if (runState === 'paused') {
+    worker.postMessage({ type: 'resume' } satisfies WorkerRequest)
+  } else if (runState === 'running') {
+    runState = 'pausing'
+    setStatus('Pausing after current search batch…')
+    worker.postMessage({ type: 'pause' } satisfies WorkerRequest)
+    updateControls()
+  } else {
+    startRun()
+  }
+}
+
 function resetRun(): void {
   if (!selectedTarget) return
   restartWorker()
   runState = 'idle'
   clearSvg()
-  drawBackground()
   resetProgress()
+  showReadyToRender()
   setStatus('Image reset · ready to generate')
   updateControls()
 }
@@ -226,7 +333,7 @@ function downloadSvg(): void {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `${selectedFile?.name.replace(/\.[^.]+$/, '') || 'primitive'}.svg`
+  anchor.download = `${selectedFile?.name.replace(/\.[^.]+$/, '') || 'primitify'}.svg`
   document.body.append(anchor)
   anchor.click()
   anchor.remove()
@@ -253,7 +360,7 @@ function handleWorkerMessage({ data }: MessageEvent<WorkerEvent>): void {
       generatedPreview.height = data.height
       context.putImageData(new ImageData(new Uint8ClampedArray(data.buffer), data.width, data.height), 0, 0)
       generatedPreview.hidden = false
-      generatedPlaceholder.style.display = 'none'
+      generatedEmpty.hidden = true
       break
     }
     case 'progress': {
@@ -262,8 +369,7 @@ function handleWorkerMessage({ data }: MessageEvent<WorkerEvent>): void {
       generationState.textContent = 'Improving composition'
       scoreValue.textContent = `SCORE · ${data.score.toFixed(4)}`
       frameStamp.textContent = `${data.shapeIndex} SHAPES`
-      progressFill.style.width = `${percentage}%`
-      generationProgress.setAttribute('aria-valuenow', String(percentage))
+      setRenderProgress(percentage)
       setStatus(`Building image · ${data.shapeIndex} of ${data.shapeCount} shapes`)
       break
     }
@@ -288,8 +394,7 @@ function handleWorkerMessage({ data }: MessageEvent<WorkerEvent>): void {
       currentSvg = data.svg
       scoreValue.textContent = `SCORE · ${data.finalScore.toFixed(4)}`
       generationState.textContent = 'Composition complete'
-      progressFill.style.width = '100%'
-      generationProgress.setAttribute('aria-valuenow', '100')
+      setRenderProgress(100)
       setStatus('Generation complete · SVG ready to export')
       updateControls()
       break
@@ -300,6 +405,8 @@ function handleWorkerMessage({ data }: MessageEvent<WorkerEvent>): void {
     case 'error':
       runState = 'idle'
       generationState.textContent = 'Generation stopped'
+      setRenderProgress(null)
+      if (selectedTarget) showReadyToRender()
       setStatus(data.message, true)
       updateControls()
       break
@@ -308,7 +415,12 @@ function handleWorkerMessage({ data }: MessageEvent<WorkerEvent>): void {
   }
 }
 
-choosePhotoButton.addEventListener('click', () => fileInput.click())
+function choosePhoto(): void {
+  fileInput.click()
+}
+
+choosePhotoButton.addEventListener('click', choosePhoto)
+emptyChoosePhotoButton.addEventListener('click', choosePhoto)
 fileInput.addEventListener('change', () => {
   const [file] = fileInput.files ?? []
   fileInput.value = ''
@@ -319,25 +431,17 @@ workSize.addEventListener('change', () => {
   else workingDimensions.textContent = `WORKING SIZE · ${workSize.value} PX MAX`
 })
 shapeCount.addEventListener('change', () => {
-  if (selectedTarget) resetRun()
+  if (runState === 'done') resetRun()
   else resetProgress()
 })
-startButton.addEventListener('click', startRun)
-pauseButton.addEventListener('click', () => {
-  if (runState === 'paused') {
-    worker.postMessage({ type: 'resume' } satisfies WorkerRequest)
-  } else if (runState === 'running') {
-    runState = 'pausing'
-    setStatus('Pausing after current search batch…')
-    worker.postMessage({ type: 'pause' } satisfies WorkerRequest)
-    updateControls()
-  }
-})
+startButton.addEventListener('click', handlePrimaryAction)
+generatedStartButton.addEventListener('click', handlePrimaryAction)
 resetButton.addEventListener('click', resetRun)
 exportButton.addEventListener('click', downloadSvg)
 window.addEventListener('beforeunload', () => {
   worker.terminate()
   if (sourceUrl) URL.revokeObjectURL(sourceUrl)
+  if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl)
 })
 
 restartWorker()

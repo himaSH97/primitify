@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f3f1eb" />
+    <meta name="description" content="Primitify turns photos into geometric artwork." />
+    <title>Primitify — Photo to shapes</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <a class="brand" href="/app.html" aria-label="Primitify home">
+          <span class="brand-mark" aria-hidden="true"><i></i><b></b></span>
+          <span>primitify<span class="brand-period">.</span></span>
+        </a>
+        <div class="topbar-meta">
+          <span class="workspace-label">BROWSER STUDIO</span>
+          <span class="worker-status" id="worker-status" aria-live="polite">
+            <span class="status-dot" id="status-dot"></span>
+            <span id="worker-status-text">Connecting worker</span>
+          </span>
+        </div>
+      </header>
+
+      <main>
+        <section class="intro" aria-labelledby="page-title">
+          <div>
+            <p class="eyebrow"><span>01</span> A photo, rebuilt</p>
+            <h1 id="page-title">Make a little<br /><em>less ordinary.</em></h1>
+          </div>
+          <p class="intro-copy">Turn a photograph into a composition of simple shapes, one considered step at a time.</p>
+        </section>
+
+        <section class="studio" aria-label="Primitify workspace">
+          <div class="workbench">
+            <div class="bench-toolbar">
+              <div class="bench-title"><span class="live-mark"></span> WORKSPACE <span class="toolbar-slash">/</span> <span class="toolbar-muted">PREVIEW</span></div>
+              <div class="preview-options">
+                <label class="preview-size" for="work-size">MAX SIDE</label>
+                <select class="size-select" id="work-size" aria-label="Maximum working image size">
+                  <option value="128">128 PX</option>
+                  <option value="256" selected>256 PX</option>
+                  <option value="384">384 PX</option>
+                </select>
+                <button class="upload-button" id="upload-button" type="button">Choose photo <span aria-hidden="true">↗</span></button>
+                <input id="image-file" class="file-input" type="file" accept="image/png,image/jpeg,image/webp" tabindex="-1" hidden />
+              </div>
+            </div>
+
+            <p class="error-banner" id="image-error" role="alert" hidden></p>
+            <div class="preview-stage" id="drop-zone" aria-label="Drop a PNG, JPEG, or WebP image here">
+              <div class="empty-state" id="empty-state">
+                <div class="stage-art" aria-hidden="true">
+                  <div class="art-sun"></div>
+                  <div class="art-shape art-shape-back"></div>
+                  <div class="art-shape art-shape-mid"></div>
+                  <div class="art-shape art-shape-front"></div>
+                  <div class="art-ground"></div>
+                </div>
+                <div class="stage-message">
+                  <span class="message-index">STAGE 01 · IMAGE INPUT</span>
+                  <h2>Start with a photograph</h2>
+                  <p>Drop a photo here, or choose a file to begin.</p>
+                  <button class="empty-upload-button" id="empty-upload-button" type="button">Choose a photo <span aria-hidden="true">↗</span></button>
+                </div>
+              </div>
+              <canvas class="source-canvas" id="target-preview" aria-label="Resized working image preview" hidden></canvas>
+              <canvas class="source-canvas" id="current-preview" aria-label="Current optimized image preview" hidden></canvas>
+              <canvas class="triangle-debug-canvas" id="triangle-debug-preview" aria-label="Rasterized sample triangle overlay" hidden></canvas>
+              <span class="stage-corner stage-corner-top" id="source-label">DROP IMAGE</span>
+              <span class="stage-corner stage-corner-bottom" id="canvas-label">CANVAS · IDLE</span>
+            </div>
+
+            <div class="image-inspector" id="image-inspector" hidden>
+              <img class="original-thumb" id="original-thumbnail" alt="Original uploaded image thumbnail" />
+              <div class="image-details">
+                <strong class="image-name" id="image-name"></strong>
+                <span id="source-dimensions"></span>
+                <span>WORKING <strong id="work-dimensions"></strong></span>
+              </div>
+              <div class="average-color">
+                <span class="color-swatch" id="average-swatch"></span>
+                <span><small>AVERAGE RGB</small><strong id="average-hex"></strong></span>
+              </div>
+            </div>
+
+            <div class="bench-footer">
+              <span><span class="footer-indicator" id="preview-indicator"></span><span id="preview-status">Waiting for an image</span></span>
+              <span>OUTPUT <strong>SVG</strong></span>
+            </div>
+            <div class="model-debug-controls" id="model-debug-controls" hidden>
+              <div class="preview-tabs" role="group" aria-label="Choose image preview">
+                <button class="preview-tab is-selected" id="target-tab" type="button" aria-pressed="true">Target</button>
+                <button class="preview-tab" id="current-tab" type="button" aria-pressed="false">Current</button>
+              </div>
+              <label class="shape-count-control" for="shape-count">SHAPES<input id="shape-count" type="number" min="1" max="500" value="10" /></label>
+              <div class="run-actions">
+                <button class="step-button" id="run-start" type="button" disabled>Start <span aria-hidden="true">▶</span></button>
+                <button class="run-action" id="run-pause" type="button" disabled>Pause</button>
+                <button class="run-action" id="run-resume" type="button" disabled>Resume</button>
+                <button class="run-action" id="run-reset" type="button" disabled>Reset</button>
+              </div>
+              <div class="run-status" id="run-status" aria-live="polite">Load a photo to begin.</div>
+              <div class="model-score"><span>SCORE <strong id="model-score">—</strong></span><span>SHAPES <strong id="model-shapes">0</strong> · TRIALS <strong id="model-evaluations">0</strong></span></div>
+              <div class="export-actions">
+                <label for="output-size">OUTPUT SIZE</label>
+                <select id="output-size" aria-label="SVG output size">
+                  <option value="512">512 PX</option>
+                  <option value="1024" selected>1024 PX</option>
+                  <option value="2048">2048 PX</option>
+                </select>
+                <button class="download-button" id="download-svg" type="button" disabled>Download SVG <span aria-hidden="true">↓</span></button>
+              </div>
+            </div>
+          </div>
+
+          <aside class="stage-panel" aria-label="Build stages">
+            <div class="panel-heading">
+              <span class="eyebrow">BUILD PROGRESS</span>
+              <span class="stage-count">06 <span>/ 08</span></span>
+            </div>
+            <div class="progress-track" aria-hidden="true"><span class="phase-progress is-phase-six"></span></div>
+
+            <ol class="stage-list">
+              <li class="stage-item is-complete">
+                <span class="stage-number">00</span>
+                <span class="stage-copy"><strong>Workbench</strong><small>App shell + worker link</small></span>
+                <span class="stage-check" aria-label="Complete">✓</span>
+              </li>
+              <li class="stage-item is-complete">
+                <span class="stage-number">01</span>
+                <span class="stage-copy"><strong>Image input</strong><small>Upload, resize, inspect</small></span>
+                <span class="stage-check" aria-label="Complete">✓</span>
+              </li>
+              <li class="stage-item is-complete"><span class="stage-number">02</span><span class="stage-copy"><strong>Pixel engine</strong><small>Color + scoring</small></span><span class="stage-check" aria-label="Complete">✓</span></li>
+              <li class="stage-item is-complete"><span class="stage-number">03</span><span class="stage-copy"><strong>Triangle drawing</strong><small>Rasterize the first shape</small></span><span class="stage-check" aria-label="Complete">✓</span></li>
+              <li class="stage-item is-complete"><span class="stage-number">04</span><span class="stage-copy"><strong>Shape search</strong><small>Optimize one step</small></span><span class="stage-check" aria-label="Complete">✓</span></li>
+              <li class="stage-item is-complete"><span class="stage-number">05</span><span class="stage-copy"><strong>Live processing</strong><small>Move work off the UI</small></span><span class="stage-check" aria-label="Complete">✓</span></li>
+              <li class="stage-item is-active"><span class="stage-number">06</span><span class="stage-copy"><strong>Export</strong><small>Download as SVG</small></span><span class="stage-check" aria-label="Current stage">●</span></li>
+              <li class="stage-item is-locked"><span class="stage-number">07</span><span class="stage-copy"><strong>Finish</strong><small>Polish + edge cases</small></span></li>
+            </ol>
+
+            <div class="triangle-debug-controls" id="triangle-debug-controls" hidden>
+              <span class="eyebrow">DEV · RASTERIZER</span>
+              <button class="debug-button" id="triangle-debug-button" type="button" disabled>Draw sample triangle <span aria-hidden="true">↗</span></button>
+              <span class="debug-status" id="triangle-debug-status" aria-live="polite">Load a photo to inspect scanlines.</span>
+            </div>
+
+            <div class="worker-check">
+              <div class="check-copy"><span class="eyebrow">WORKER CONNECTION</span><span id="ping-result" aria-live="polite">Waiting for ready signal</span></div>
+              <button class="ping-button" id="ping-button" type="button" disabled>Ping worker <span aria-hidden="true">↗</span></button>
+            </div>
+          </aside>
+        </section>
+
+        <footer class="page-footer">
+          <span>PHASE 06 <strong>SVG EXPORT</strong></span>
+          <span>Next up: <strong>polish</strong></span>
+        </footer>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
