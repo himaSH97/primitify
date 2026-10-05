@@ -41,7 +41,8 @@ const runInfo = getElement<HTMLElement>('#run-info')
 const runStatus = getElement<HTMLElement>('#run-status')
 const startButton = getElement<HTMLButtonElement>('#start-run')
 const resetButton = getElement<HTMLButtonElement>('#reset-run')
-const exportButton = getElement<HTMLButtonElement>('#export-svg')
+const exportFormat = getElement<HTMLSelectElement>('#export-format')
+const exportButton = getElement<HTMLButtonElement>('#export-file')
 
 type RunState = 'idle' | 'running' | 'pausing' | 'paused' | 'done'
 
@@ -59,6 +60,7 @@ let svgFooter = ''
 let svgFragments: string[] = []
 let currentSvg = ''
 let previewObjectUrl: string | null = null
+let exporting = false
 
 function setStatus(message: string, isError = false): void {
   runStatus.textContent = message
@@ -105,7 +107,8 @@ function updateControls(): void {
   startButton.setAttribute('aria-label', runState === 'paused' ? 'Resume generation' : runState === 'running' ? 'Pause generation' : 'Start generation')
   generatedStartButton.disabled = !workerReady || !selectedTarget || loading || runState !== 'idle'
   resetButton.disabled = !selectedTarget || loading
-  exportButton.disabled = currentSvg.length === 0
+  exportFormat.disabled = exporting
+  exportButton.disabled = currentSvg.length === 0 || exporting
 }
 
 function clearSvg(): void {
@@ -327,17 +330,64 @@ function resetRun(): void {
   updateControls()
 }
 
-function downloadSvg(): void {
-  if (!currentSvg) return
-  const blob = new Blob([currentSvg], { type: 'image/svg+xml;charset=utf-8' })
+function downloadBlob(blob: Blob, extension: 'svg' | 'png'): void {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `${selectedFile?.name.replace(/\.[^.]+$/, '') || 'primitify'}.svg`
+  anchor.download = `${selectedFile?.name.replace(/\.[^.]+$/, '') || 'primitify'}.${extension}`
   document.body.append(anchor)
   anchor.click()
   anchor.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+async function createPngBlob(svg: string): Promise<Blob> {
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }))
+  try {
+    const image = new Image()
+    image.src = url
+    await image.decode()
+
+    if (!image.naturalWidth || !image.naturalHeight) {
+      throw new Error('The generated SVG has no exportable dimensions.')
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('This browser could not create an export canvas.')
+    context.drawImage(image, 0, 0)
+
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob)
+        else reject(new Error('The browser could not encode the PNG.'))
+      }, 'image/png')
+    })
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+async function downloadCurrentImage(): Promise<void> {
+  if (!currentSvg || exporting) return
+  exporting = true
+  updateControls()
+  const format = exportFormat.value
+
+  try {
+    const blob = format === 'png'
+      ? await createPngBlob(currentSvg)
+      : new Blob([currentSvg], { type: 'image/svg+xml;charset=utf-8' })
+    downloadBlob(blob, format === 'png' ? 'png' : 'svg')
+    setStatus(`${format.toUpperCase()} export ready`)
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : `Could not export ${format.toUpperCase()}.`, true)
+  } finally {
+    exporting = false
+    updateControls()
+  }
 }
 
 function handleWorkerMessage({ data }: MessageEvent<WorkerEvent>): void {
@@ -437,7 +487,7 @@ shapeCount.addEventListener('change', () => {
 startButton.addEventListener('click', handlePrimaryAction)
 generatedStartButton.addEventListener('click', handlePrimaryAction)
 resetButton.addEventListener('click', resetRun)
-exportButton.addEventListener('click', downloadSvg)
+exportButton.addEventListener('click', () => void downloadCurrentImage())
 window.addEventListener('beforeunload', () => {
   worker.terminate()
   if (sourceUrl) URL.revokeObjectURL(sourceUrl)
