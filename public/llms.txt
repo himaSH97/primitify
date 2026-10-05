@@ -1,0 +1,22 @@
+# Primitify
+
+> Primitify is a browser-based tool that transforms uploaded photographs into geometric artwork made from colorful triangles.
+
+## Main page
+
+- `/`: Upload a PNG, JPEG, or WebP image, choose working and SVG output sizes, select a shape count, preview generation, and download the result as SVG.
+
+## How it works
+
+- Images are decoded and resized in the browser.
+- Triangle optimization runs in a browser Web Worker.
+- The generated composition can be downloaded as SVG.
+
+## Privacy
+
+- Image processing is client-side. The application does not upload images to an application server.
+
+## Technical details
+
+- Built with Vite and TypeScript.
+- `/app.html` is a secondary legacy workspace and is excluded from search indexing.
