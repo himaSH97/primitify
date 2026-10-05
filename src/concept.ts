@@ -1,0 +1,344 @@
+import { averageColor, loadImage } from './imageLoad'
+import type { PixelImage, WorkerEvent, WorkerRequest } from './types'
+
+function getElement<T extends Element>(selector: string): T {
+  const element = document.querySelector<T>(selector)
+  if (!element) throw new Error(`Missing concept element: ${selector}`)
+  return element
+}
+
+const workerStatus = getElement<HTMLElement>('#worker-status')
+const fileInput = getElement<HTMLInputElement>('#image-file')
+const choosePhotoButton = getElement<HTMLButtonElement>('#choose-photo')
+const workSize = getElement<HTMLSelectElement>('#work-size')
+const shapeCount = getElement<HTMLSelectElement>('#shape-count')
+const outputSize = getElement<HTMLSelectElement>('#output-size')
+const projectName = getElement<HTMLElement>('#project-name')
+const sourceImage = getElement<HTMLImageElement>('.original-image')
+const sourceDimensions = getElement<HTMLElement>('#source-dimensions')
+const sourceName = getElement<HTMLElement>('#source-name')
+const workingDimensions = getElement<HTMLElement>('#working-dimensions')
+const generatedPlaceholder = getElement<SVGElement>('#generated-placeholder')
+const generatedPreview = getElement<HTMLCanvasElement>('#generated-preview')
+const generatedFrame = getElement<HTMLElement>('#generated-frame')
+const frameStamp = getElement<HTMLElement>('#frame-stamp')
+const shapeProgress = getElement<HTMLElement>('#shape-progress')
+const generationState = getElement<HTMLElement>('#generation-state')
+const scoreValue = getElement<HTMLElement>('#score-value')
+const generationProgress = getElement<HTMLElement>('#generation-progress')
+const progressFill = getElement<HTMLElement>('#progress-fill')
+const runInfo = getElement<HTMLElement>('#run-info')
+const runStatus = getElement<HTMLElement>('#run-status')
+const startButton = getElement<HTMLButtonElement>('#start-run')
+const pauseButton = getElement<HTMLButtonElement>('#pause-run')
+const resetButton = getElement<HTMLButtonElement>('#reset-run')
+const exportButton = getElement<HTMLButtonElement>('#export-svg')
+
+type RunState = 'idle' | 'running' | 'pausing' | 'paused' | 'done'
+
+let worker: Worker
+let workerReady = false
+let runState: RunState = 'idle'
+let loading = false
+let loadRequest = 0
+let selectedFile: File | null = null
+let sourceUrl: string | null = null
+let selectedTarget: PixelImage | null = null
+let selectedBackground: { r: number; g: number; b: number; a: number } | null = null
+let svgHeader = ''
+let svgFooter = ''
+let svgFragments: string[] = []
+let currentSvg = ''
+
+function setStatus(message: string, isError = false): void {
+  runStatus.textContent = message
+  runInfo.classList.toggle('is-error', isError)
+}
+
+function updateControls(): void {
+  const busy = runState === 'running' || runState === 'pausing' || runState === 'paused'
+  startButton.disabled = !workerReady || !selectedTarget || loading || busy
+  workSize.disabled = busy || loading
+  shapeCount.disabled = busy || loading
+  outputSize.disabled = busy || loading
+  choosePhotoButton.disabled = loading
+  pauseButton.disabled = runState !== 'running' && runState !== 'paused'
+  pauseButton.innerHTML = runState === 'paused'
+    ? '<span aria-hidden="true">▶</span>Resume'
+    : '<span class="button-icon" aria-hidden="true">Ⅱ</span>Pause'
+  resetButton.disabled = !selectedTarget || loading
+  exportButton.disabled = currentSvg.length === 0
+}
+
+function clearSvg(): void {
+  svgHeader = ''
+  svgFooter = ''
+  svgFragments = []
+  currentSvg = ''
+  updateControls()
+}
+
+function assembleSvg(): void {
+  if (!svgHeader || svgFragments.length === 0) return
+  currentSvg = [svgHeader, ...svgFragments, svgFooter].join('\n')
+  updateControls()
+}
+
+function drawBackground(): void {
+  if (!selectedTarget || !selectedBackground) return
+  const { width, height } = selectedTarget
+  generatedPreview.width = width
+  generatedPreview.height = height
+  const context = generatedPreview.getContext('2d')
+  if (!context) return
+
+  const pixels = new Uint8ClampedArray(width * height * 4)
+  for (let offset = 0; offset < pixels.length; offset += 4) {
+    pixels[offset] = selectedBackground.r
+    pixels[offset + 1] = selectedBackground.g
+    pixels[offset + 2] = selectedBackground.b
+    pixels[offset + 3] = 255
+  }
+  context.putImageData(new ImageData(pixels, width, height), 0, 0)
+  generatedPlaceholder.style.display = 'none'
+  generatedPreview.hidden = false
+}
+
+function restartWorker(): void {
+  worker?.terminate()
+  worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
+  workerReady = false
+  workerStatus.textContent = 'CONNECTING WORKER'
+  worker.addEventListener('message', handleWorkerMessage)
+  worker.addEventListener('error', () => {
+    workerReady = false
+    runState = 'idle'
+    workerStatus.textContent = 'WORKER UNAVAILABLE'
+    setStatus('The image worker stopped. Reload the page to try again.', true)
+    updateControls()
+  })
+  updateControls()
+}
+
+function resetProgress(): void {
+  const total = Number(shapeCount.value)
+  shapeProgress.textContent = `TRIANGLES · 0 / ${total}`
+  generationState.textContent = selectedTarget ? 'Ready to generate' : 'Waiting for an image'
+  scoreValue.textContent = 'SCORE · —'
+  frameStamp.textContent = '0 SHAPES'
+  progressFill.style.width = '0%'
+  generationProgress.setAttribute('aria-valuenow', '0')
+}
+
+async function displayImage(file: File): Promise<void> {
+  const requestId = ++loadRequest
+  loading = true
+  if (runState === 'running' || runState === 'pausing' || runState === 'paused') {
+    restartWorker()
+  }
+  runState = 'idle'
+  clearSvg()
+  setStatus('Preparing working image…')
+  updateControls()
+
+  try {
+    const loaded = await loadImage(file, Number(workSize.value))
+    if (requestId !== loadRequest) {
+      URL.revokeObjectURL(loaded.sourceUrl)
+      return
+    }
+
+    if (sourceUrl) URL.revokeObjectURL(sourceUrl)
+    sourceUrl = loaded.sourceUrl
+    selectedFile = file
+    sourceImage.src = sourceUrl
+    sourceImage.alt = file.name
+    sourceDimensions.textContent = `SOURCE · ${loaded.sourceWidth} × ${loaded.sourceHeight} PX`
+    sourceName.textContent = file.name
+    projectName.textContent = file.name
+    workingDimensions.textContent = `${loaded.imageData.width} × ${loaded.imageData.height} WORKING`
+    generatedFrame.setAttribute('aria-label', `Geometric render of ${file.name}`)
+    choosePhotoButton.firstChild!.textContent = 'Replace photo '
+
+    const average = averageColor(loaded.imageData)
+    selectedBackground = { ...average, a: 255 }
+    selectedTarget = {
+      width: loaded.imageData.width,
+      height: loaded.imageData.height,
+      data: loaded.imageData.data.slice(),
+    }
+    drawBackground()
+    resetProgress()
+    runState = 'idle'
+    setStatus('Image ready · start generation')
+  } catch (error) {
+    if (requestId !== loadRequest) return
+    setStatus(error instanceof Error ? error.message : 'Could not load this image.', true)
+  } finally {
+    if (requestId === loadRequest) {
+      loading = false
+      updateControls()
+    }
+  }
+}
+
+function startRun(): void {
+  if (!selectedTarget || !selectedBackground || !workerReady || loading) return
+  const total = Number(shapeCount.value)
+  runState = 'running'
+  clearSvg()
+  resetProgress()
+  generationState.textContent = 'Searching for first shape…'
+  setStatus('Building image · search running in worker')
+  drawBackground()
+  updateControls()
+
+  const request: WorkerRequest = {
+    type: 'start',
+    target: { ...selectedTarget, data: selectedTarget.data.slice() },
+    config: {
+      shapeCount: total,
+      alpha: 128,
+      randomTrials: 100,
+      maxAge: 40,
+      restarts: 2,
+      outputSize: Number(outputSize.value),
+      background: selectedBackground,
+    },
+  }
+  worker.postMessage(request)
+}
+
+function resetRun(): void {
+  if (!selectedTarget) return
+  restartWorker()
+  runState = 'idle'
+  clearSvg()
+  drawBackground()
+  resetProgress()
+  setStatus('Image reset · ready to generate')
+  updateControls()
+}
+
+function downloadSvg(): void {
+  if (!currentSvg) return
+  const blob = new Blob([currentSvg], { type: 'image/svg+xml;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `${selectedFile?.name.replace(/\.[^.]+$/, '') || 'primitive'}.svg`
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function handleWorkerMessage({ data }: MessageEvent<WorkerEvent>): void {
+  switch (data.type) {
+    case 'ready':
+      workerReady = true
+      workerStatus.textContent = 'WORKER READY'
+      updateControls()
+      break
+    case 'runStarted':
+      svgHeader = data.svgHeader
+      svgFooter = data.svgFooter
+      svgFragments = []
+      currentSvg = ''
+      break
+    case 'preview': {
+      const context = generatedPreview.getContext('2d')
+      if (!context) return
+      generatedPreview.width = data.width
+      generatedPreview.height = data.height
+      context.putImageData(new ImageData(new Uint8ClampedArray(data.buffer), data.width, data.height), 0, 0)
+      generatedPreview.hidden = false
+      generatedPlaceholder.style.display = 'none'
+      break
+    }
+    case 'progress': {
+      const percentage = Math.round((data.shapeIndex / data.shapeCount) * 100)
+      shapeProgress.textContent = `TRIANGLES · ${data.shapeIndex} / ${data.shapeCount}`
+      generationState.textContent = 'Improving composition'
+      scoreValue.textContent = `SCORE · ${data.score.toFixed(4)}`
+      frameStamp.textContent = `${data.shapeIndex} SHAPES`
+      progressFill.style.width = `${percentage}%`
+      generationProgress.setAttribute('aria-valuenow', String(percentage))
+      setStatus(`Building image · ${data.shapeIndex} of ${data.shapeCount} shapes`)
+      break
+    }
+    case 'shapeAdded':
+      svgFragments[data.index - 1] = data.svgFragment
+      assembleSvg()
+      break
+    case 'paused':
+      runState = 'paused'
+      generationState.textContent = 'Generation paused'
+      setStatus(`Paused · ${shapeProgress.textContent?.replace('TRIANGLES · ', '')} shapes`)
+      updateControls()
+      break
+    case 'resumed':
+      runState = 'running'
+      generationState.textContent = 'Improving composition'
+      setStatus('Building image · search resumed')
+      updateControls()
+      break
+    case 'done':
+      runState = 'done'
+      currentSvg = data.svg
+      scoreValue.textContent = `SCORE · ${data.finalScore.toFixed(4)}`
+      generationState.textContent = 'Composition complete'
+      progressFill.style.width = '100%'
+      generationProgress.setAttribute('aria-valuenow', '100')
+      setStatus('Generation complete · SVG ready to export')
+      updateControls()
+      break
+    case 'aborted':
+      runState = 'idle'
+      updateControls()
+      break
+    case 'error':
+      runState = 'idle'
+      generationState.textContent = 'Generation stopped'
+      setStatus(data.message, true)
+      updateControls()
+      break
+    case 'pong':
+      break
+  }
+}
+
+choosePhotoButton.addEventListener('click', () => fileInput.click())
+fileInput.addEventListener('change', () => {
+  const [file] = fileInput.files ?? []
+  fileInput.value = ''
+  if (file) void displayImage(file)
+})
+workSize.addEventListener('change', () => {
+  if (selectedFile) void displayImage(selectedFile)
+  else workingDimensions.textContent = `WORKING SIZE · ${workSize.value} PX MAX`
+})
+shapeCount.addEventListener('change', () => {
+  if (selectedTarget) resetRun()
+  else resetProgress()
+})
+startButton.addEventListener('click', startRun)
+pauseButton.addEventListener('click', () => {
+  if (runState === 'paused') {
+    worker.postMessage({ type: 'resume' } satisfies WorkerRequest)
+  } else if (runState === 'running') {
+    runState = 'pausing'
+    setStatus('Pausing after current search batch…')
+    worker.postMessage({ type: 'pause' } satisfies WorkerRequest)
+    updateControls()
+  }
+})
+resetButton.addEventListener('click', resetRun)
+exportButton.addEventListener('click', downloadSvg)
+window.addEventListener('beforeunload', () => {
+  worker.terminate()
+  if (sourceUrl) URL.revokeObjectURL(sourceUrl)
+})
+
+restartWorker()
+resetProgress()
